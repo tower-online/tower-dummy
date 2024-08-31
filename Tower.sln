@@ -1,0 +1,16 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TowerDummy", "TowerDummy.csproj", "{E7F6F2F3-DCA8-4D57-9527-0AD7E49AC72F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E7F6F2F3-DCA8-4D57-9527-0AD7E49AC72F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E7F6F2F3-DCA8-4D57-9527-0AD7E49AC72F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E7F6F2F3-DCA8-4D57-9527-0AD7E49AC72F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E7F6F2F3-DCA8-4D57-9527-0AD7E49AC72F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

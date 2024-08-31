@@ -1,0 +1,3 @@
+[submodule "Schema"]
+	path = Schema
+	url = git@github.com:SanitoGonzalez/tower-schema.git
