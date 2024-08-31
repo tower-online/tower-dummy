@@ -1,29 +1,32 @@
 using Google.FlatBuffers;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using Tower.Network.Packet;
+using Tower.System;
 
 namespace Tower.Network;
 
 public partial class Connection
 {
-    [Signal]
-    public delegate void SEntityMovementsEventHandler(
-        int[] entityIds, Godot.Vector2[] targetDirections, Godot.Vector2[] targetPositions);
-
-    [Signal]
-    public delegate void SEntitySpawnsEventHandler(
-        int[] entityIds, int[] entityTypes, Godot.Vector2[] positions, float[] rotations);
-
-    [Signal]
-    public delegate void SPlayerSpawnEventHandler(
-        int entityId, int entityType, Godot.Vector2 position, float rotation);
-
     private readonly TcpClient _client = new TcpClient();
     private NetworkStream _stream;
     private readonly BufferBlock<ByteBuffer> _sendBufferBlock = new();
+    private readonly ILogger<Connection> _logger;
+
+    public Connection(ILogger<Connection> logger)
+    {
+        _logger = logger;
+    }
+
+    ~Connection()
+    {
+        Disconnect();
+        _stream?.Dispose();
+        _client?.Dispose();
+    }
 
     private void Run()
     {
@@ -31,8 +34,8 @@ public partial class Connection
         {
             const string username = "tester_00001";
 
-            var token = await Auth.RequestToken(username);
-            if (token == default) return;
+            var token = await RequestAuthToken(username);
+            if (token.Length == 0) return;
 
             if (!await ConnectAsync(Settings.RemoteHost, 30000)) return;
 
@@ -77,7 +80,7 @@ public partial class Connection
 
     public async Task<bool> ConnectAsync(string host, int port)
     {
-        GD.Print($"[{nameof(Connection)}] Connecting to {host}:{port}...");
+        _logger.LogInformation("Connecting to {}:{}...", host, port);
         try
         {
             await _client.ConnectAsync(host, port);
@@ -88,11 +91,11 @@ public partial class Connection
         }
         catch (ArgumentOutOfRangeException)
         {
-            GD.PrintErr($"[{nameof(Connection)}] port out of range: {port}");
+            _logger.LogError("port out of range: {}", port);
         }
         catch (Exception ex)
         {
-            GD.PrintErr($"[{nameof(Connection)}] Error connecting: {ex}");
+            _logger.LogError("Error connecting: {}", ex);
         }
 
         return false;
@@ -102,15 +105,9 @@ public partial class Connection
     {
         if (!_client.Connected) return;
 
-        GD.Print($"[{nameof(Connection)}] Disconnecting...");
+        _logger.LogInformation("Disconnecting...");
         _stream?.Close();
         _client?.Close();
-    }
-
-    public override void _ExitTree()
-    {
-        Disconnect();
-        base._ExitTree();
     }
 
     private async Task<ByteBuffer> ReceivePacketAsync()

@@ -10,6 +10,7 @@
 
     <ItemGroup>
       <PackageReference Include="Google.FlatBuffers" Version="24.3.25" />
+      <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0-preview.7.24405.7" />
       <PackageReference Include="YamlDotNet" Version="16.0.0" />
     </ItemGroup>
 

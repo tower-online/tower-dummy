@@ -1,11 +1,17 @@
 using Google.FlatBuffers;
+using Microsoft.Extensions.Logging;
 using Tower.Network.Packet;
+using Vector2 = System.Numerics.Vector2;
 
 namespace Tower.Network;
 
 public partial class Connection
 {
-    
+    public event EventHandler<EntityMovementsEventArgs> EntityMovementsEventHandler;
+    public event EventHandler<EntitySpawnsEventArgs> EntitySpawnsEventHandler;
+    public event EventHandler<PlayerSpawnEventArgs> PlayerSpawnEventHandler;
+
+
     #region Client Packet Handlers
 
     private void HandleHeartBeat()
@@ -24,14 +30,14 @@ public partial class Connection
     {
         if (response.Result != ClientJoinResult.OK)
         {
-            GD.PrintErr($"[{nameof(Connection)}] [ClientJoinResponse] Failed");
+            _logger.LogError("[ClientJoinResponse] Failed");
 
             //TODO: Signal fail or retry?
             Disconnect();
             return;
         }
 
-        GD.Print($"[{nameof(Connection)}] [ClientJoinResponse] OK");
+        _logger.LogInformation("[ClientJoinResponse] OK");
     }
 
     #endregion
@@ -42,14 +48,14 @@ public partial class Connection
     {
         var length = movements.MovementsLength;
         var entityIds = new int[length];
-        var targetDirections = new Godot.Vector2[length];
-        var targetPositions = new Godot.Vector2[length];
+        var targetDirections = new Vector2[length];
+        var targetPositions = new Vector2[length];
 
         for (var i = 0; i < length; i++)
         {
             if (!movements.Movements(i).HasValue)
             {
-                GD.PrintErr($"[{nameof(Connection)}] [{nameof(HandleEntityMovements)}] Invalid array");
+                _logger.LogError("[{}] Invalid array", nameof(HandleEntityMovements));
                 return;
             }
 
@@ -58,12 +64,12 @@ public partial class Connection
             var targetPosition = movement.TargetPosition;
 
             entityIds[i] = (int)movement.EntityId;
-            targetDirections[i] = new Godot.Vector2(targetDirection.X, targetDirection.Y);
-            targetPositions[i] = new Godot.Vector2(targetPosition.X, targetPosition.Y);
+            targetDirections[i] = new Vector2(targetDirection.X, targetDirection.Y);
+            targetPositions[i] = new Vector2(targetPosition.X, targetPosition.Y);
         }
 
-        CallDeferred(GodotObject.MethodName.EmitSignal, SignalName.SEntityMovements,
-            entityIds, targetDirections, targetPositions);
+        EntityMovementsEventHandler.Invoke(this,
+            new EntityMovementsEventArgs(entityIds, targetDirections, targetPositions));
     }
 
     private void HandleEntitySpawns(EntitySpawns spawns)
@@ -71,14 +77,14 @@ public partial class Connection
         var length = spawns.SpawnsLength;
         var entityIds = new int[length];
         var entityTypes = new int[length];
-        var positions = new Godot.Vector2[length];
+        var positions = new Vector2[length];
         var rotations = new float[length];
 
         for (var i = 0; i < length; i++)
         {
             if (!spawns.Spawns(i).HasValue)
             {
-                GD.PrintErr($"[{nameof(Connection)}] [{nameof(HandleEntitySpawns)}] Invalid array");
+                _logger.LogError("[{}] Invalid array", nameof(HandleEntitySpawns));
                 return;
             }
 
@@ -87,12 +93,11 @@ public partial class Connection
 
             entityIds[i] = (int)spawn.EntityId;
             entityTypes[i] = (int)spawn.EntityType;
-            positions[i] = new Godot.Vector2(position.X, position.Y);
+            positions[i] = new Vector2(position.X, position.Y);
             rotations[i] = spawn.Rotation;
         }
 
-        CallDeferred(GodotObject.MethodName.EmitSignal, SignalName.SEntitySpawns,
-            entityIds, entityTypes, positions, rotations);
+        EntitySpawnsEventHandler.Invoke(this, new EntitySpawnsEventArgs(entityIds, entityTypes, positions, rotations));
     }
 
     private void HandleEntityDespawn(EntityDespawn despawn)
@@ -105,22 +110,23 @@ public partial class Connection
 
     private void HandlePlayerSpawn(PlayerSpawn spawn)
     {
-        var position = new Godot.Vector2();
+        var position = new Vector2();
         if (spawn.Position.HasValue)
         {
             var pos = spawn.Position.Value;
             position.X = pos.X;
             position.Y = pos.Y;
         }
-        
-        CallDeferred(GodotObject.MethodName.EmitSignal, SignalName.SPlayerSpawn, (int)spawn.EntityId, (int)spawn.EntityType, position, spawn.Rotation);
+
+        PlayerSpawnEventHandler.Invoke(this,
+            new PlayerSpawnEventArgs((int)spawn.EntityId, (int)spawn.EntityType, position, spawn.Rotation));
     }
 
     #endregion
 
     #region Player Action Handlers
 
-    public void HandlePlayerMovement(Godot.Vector2 targetDirection)
+    public void HandlePlayerMovement(Vector2 targetDirection)
     {
         var builder = new FlatBufferBuilder(128);
         PlayerMovement.StartPlayerMovement(builder);
@@ -134,4 +140,29 @@ public partial class Connection
     }
 
     #endregion
+}
+
+public class EntityMovementsEventArgs(int[] entityIds, Vector2[] targetDirections, Vector2[] targetPositions)
+    : EventArgs
+{
+    public int[] EntityIds { get; } = entityIds;
+    public Vector2[] TargetDirections { get; } = targetDirections;
+    public Vector2[] TargetPositions { get; } = targetPositions;
+}
+
+public class EntitySpawnsEventArgs(int[] entityIds, int[] entityTypes, Vector2[] positions, float[] rotations)
+    : EventArgs
+{
+    public int[] EntityIds { get; } = entityIds;
+    public int[] EntityTypes { get; } = entityTypes;
+    public Vector2[] TargetPositions { get; } = positions;
+    public float[] Rotations { get; } = rotations;
+}
+
+public class PlayerSpawnEventArgs(int entityId, int entityType, Vector2 position, float rotation) : EventArgs
+{
+    int EntityId { get; } = entityId;
+    int EntityType { get; } = entityType;
+    Vector2 Position { get; } = position;
+    float Rotation { get; } = rotation;
 }
