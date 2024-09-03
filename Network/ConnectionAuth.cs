@@ -12,14 +12,13 @@ namespace Tower.Network;
 
 public partial class Connection
 {
-    public async Task<string> RequestAuthToken(string username)
+    public async Task<string?> RequestAuthToken(string username)
     {
         var url = $"https://{Settings.RemoteHost}:8000/token/test";
         var requestData = new Dictionary<string, string>
         {
             ["username"] = username
         };
-        _logger.LogInformation("username={} -> {}", username, url);
 
 
         using var handler = new HttpClientHandler();
@@ -43,12 +42,12 @@ public partial class Connection
             }
 
             _logger.LogError("Invalid json");
-            return default;
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError("Error requesting token: {}", ex.Message);
-            return default;
         }
+
+        return null;
     }
 }

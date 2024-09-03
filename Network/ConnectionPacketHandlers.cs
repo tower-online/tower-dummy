@@ -119,7 +119,7 @@ public partial class Connection
         }
 
         PlayerSpawnEventHandler.Invoke(this,
-            new PlayerSpawnEventArgs((int)spawn.EntityId, (int)spawn.EntityType, position, spawn.Rotation));
+            new PlayerSpawnEventArgs((int)spawn.EntityId, (int)spawn.EntityType, position, spawn.Rotation));    
     }
 
     #endregion

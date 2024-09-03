@@ -1,81 +1,55 @@
 using Google.FlatBuffers;
 using Microsoft.Extensions.Logging;
-using System;
 using System.Net.Sockets;
-using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using Tower.Network.Packet;
-using Tower.System;
 
 namespace Tower.Network;
 
-public partial class Connection
+public partial class Connection(ILogger logger, CancellationToken cancellationToken)
 {
-    private readonly TcpClient _client = new TcpClient();
-    private NetworkStream _stream;
+    private readonly TcpClient _client = new();
+    private NetworkStream? _stream;
     private readonly BufferBlock<ByteBuffer> _sendBufferBlock = new();
-    private readonly ILogger<Connection> _logger;
-
-    public Connection(ILogger<Connection> logger)
-    {
-        _logger = logger;
-    }
+    private readonly CancellationToken _cancellationToken = cancellationToken;
+    private readonly ILogger _logger = logger;
 
     ~Connection()
     {
         Disconnect();
         _stream?.Dispose();
-        _client?.Dispose();
+        _client.Dispose();
     }
 
-    private void Run()
+    public void Run()
     {
+        // Receiving loop
         _ = Task.Run(async () =>
         {
-            const string username = "tester_00001";
-
-            var token = await RequestAuthToken(username);
-            if (token.Length == 0) return;
-
-            if (!await ConnectAsync(Settings.RemoteHost, 30000)) return;
-
-            // Receiving loop
-            _ = Task.Run(async () =>
+            while (_client.Connected)
             {
-                while (_client.Connected)
-                {
-                    var buffer = await ReceivePacketAsync();
-                    HandlePacket(buffer);
-                }
-            });
+                var buffer = await ReceivePacketAsync();
+                HandlePacket(buffer);
+            }
+        }, _cancellationToken);
 
-            // Sending loop
-            _ = Task.Run(async () =>
+        // Sending loop
+        _ = Task.Run(async () =>
+        {
+            while (_client.Connected)
             {
-                while (_client.Connected)
+                var buffer = await _sendBufferBlock.ReceiveAsync(_cancellationToken);
+                try
                 {
-                    var buffer = await _sendBufferBlock.ReceiveAsync();
-                    try
-                    {
-                        await _stream.WriteAsync(buffer.ToSizedArray());
-                    }
-                    catch (Exception)
-                    {
-                        Disconnect();
-                    }
+                    if (_stream is null) break;
+                    await _stream.WriteAsync(buffer.ToSizedArray(), _cancellationToken);
                 }
-            });
-
-            // Send ClientJoinRequest with acquired token
-            var builder = new FlatBufferBuilder(512);
-            var request =
-                ClientJoinRequest.CreateClientJoinRequest(builder,
-                    ClientPlatform.TEST, builder.CreateString(username), builder.CreateString(token));
-            var packetBase = PacketBase.CreatePacketBase(builder, PacketType.ClientJoinRequest, request.Value);
-            builder.FinishSizePrefixed(packetBase.Value);
-
-            SendPacket(builder.DataBuffer);
-        });
+                catch (Exception)
+                {
+                    Disconnect();
+                }
+            }
+        }, _cancellationToken);
     }
 
     public async Task<bool> ConnectAsync(string host, int port)
@@ -83,15 +57,11 @@ public partial class Connection
         _logger.LogInformation("Connecting to {}:{}...", host, port);
         try
         {
-            await _client.ConnectAsync(host, port);
+            await _client.ConnectAsync(host, port, _cancellationToken);
             _stream = _client.GetStream();
             _client.NoDelay = true;
 
             return true;
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-            _logger.LogError("port out of range: {}", port);
         }
         catch (Exception ex)
         {
@@ -107,36 +77,32 @@ public partial class Connection
 
         _logger.LogInformation("Disconnecting...");
         _stream?.Close();
-        _client?.Close();
+        _client.Close();
     }
 
     private async Task<ByteBuffer> ReceivePacketAsync()
     {
-        if (!_client.Connected) return new ByteBuffer(0);
+        if (!_client.Connected || _stream is null) return new ByteBuffer(0);
 
         try
         {
             var headerBuffer = new byte[FlatBufferConstants.SizePrefixLength];
-            await _stream.ReadExactlyAsync(headerBuffer, 0, headerBuffer.Length);
+            await _stream.ReadExactlyAsync(headerBuffer, 0, headerBuffer.Length, _cancellationToken);
 
             var bodyBuffer = new byte[ByteBufferUtil.GetSizePrefix(new ByteBuffer(headerBuffer))];
-            await _stream.ReadExactlyAsync(bodyBuffer, 0, bodyBuffer.Length);
+            await _stream.ReadExactlyAsync(bodyBuffer, 0, bodyBuffer.Length, _cancellationToken);
 
             return new ByteBuffer(bodyBuffer);
         }
-        catch (OperationCanceledException)
-        {
-        }
         catch (Exception)
         {
-            // GD.PrintErr($"[{nameof(Connection)}] Error reading: {ex}");
             Disconnect();
         }
 
         return new ByteBuffer(0);
     }
 
-    private void SendPacket(ByteBuffer buffer)
+    public void SendPacket(ByteBuffer buffer)
     {
         if (!_client.Connected) return;
 
@@ -180,5 +146,4 @@ public partial class Connection
                 break;
         }
     }
-
 }

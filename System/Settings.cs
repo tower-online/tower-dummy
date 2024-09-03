@@ -7,6 +7,7 @@ namespace Tower.System;
 public static class Settings
 {
     public static string RemoteHost { get; }
+    public static ushort RemotePort { get; }
     public static uint NumClients { get; }
     
     static Settings()
@@ -16,6 +17,7 @@ public static class Settings
 
         var settings = deserializer.Deserialize<Dictionary<string, object>>(content);
         RemoteHost = Convert.ToString(settings["remote_host"])!;
+        RemotePort = Convert.ToUInt16(settings["remote_port"]);
         NumClients = Convert.ToUInt32(settings["num_clients"]);
     }
 }
