@@ -1,6 +1,7 @@
 bin/
 obj/
 /packages/
+*.sln.DotSettings.user
 
 .idea
 riderModule.iml
