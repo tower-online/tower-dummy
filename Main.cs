@@ -8,10 +8,10 @@ var loggerFactory = LoggerFactory.Create(builder =>
     builder.AddConsole();
 });
 
-var clients = new Client[Settings.NumClients];
-for (var i = 0; i < Settings.NumClients; i++)
+List<Client> clients = [];
+for (var i = 1; i < Settings.NumClients + 1; i++)
 {
-    clients[i] = new Client($"dummy_{i:D5}", loggerFactory);
+    clients.Add(new Client($"dummy_{i:D5}", loggerFactory));
 }
 
 await Task.WhenAll(clients.Select(client => client.Run()));
