@@ -21,10 +21,10 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
         _client.Dispose();
     }
 
-    public void Run()
+    public async Task Run()
     {
         // Receiving loop
-        _ = Task.Run(async () =>
+        var receiveTask = Task.Run(async () =>
         {
             while (_client.Connected)
             {
@@ -34,7 +34,7 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
         }, _cancellationToken);
 
         // Sending loop
-        _ = Task.Run(async () =>
+        var sendTask = Task.Run(async () =>
         {
             while (_client.Connected)
             {
@@ -50,6 +50,8 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
                 }
             }
         }, _cancellationToken);
+
+        await Task.WhenAll(receiveTask, sendTask);
     }
 
     public async Task<bool> ConnectAsync(string host, int port)

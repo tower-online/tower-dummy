@@ -28,7 +28,7 @@ public class Client
     public async Task Run()
     {
         _logger.LogInformation("Running...");
-        
+
         _authToken = await _connection.RequestAuthToken(_username);
         var characters = await _connection.RequestCharacters(_username, _authToken);
         if (characters is null || characters.Count == 0)
@@ -37,25 +37,28 @@ public class Client
             Stop();
             return;
         }
+
         _logger.LogInformation("Character: {}", characters[0]);
-        
+
         if (!await _connection.ConnectAsync(Settings.RemoteHost, Settings.RemotePort))
         {
             Stop();
             return;
         }
-        
+
         // Send ClientJoinRequest with acquired token
         var characterName = characters[0];
         var builder = new FlatBufferBuilder(512);
         var request =
             ClientJoinRequest.CreateClientJoinRequest(builder,
-                builder.CreateString(characterName), builder.CreateString(_authToken));
+                builder.CreateString(_username),
+                builder.CreateString(characterName),
+                builder.CreateString(_authToken));
         var packetBase = PacketBase.CreatePacketBase(builder, PacketType.ClientJoinRequest, request.Value);
         builder.FinishSizePrefixed(packetBase.Value);
         _connection.SendPacket(builder.DataBuffer);
-        
-        _connection.Run();
+
+        await _connection.Run();
     }
 
     public void Stop()
@@ -66,6 +69,6 @@ public class Client
 
     private void OnPlayerSpawn(object? _, PlayerSpawnEventArgs args)
     {
-        
+        _logger.LogInformation("OnPlayerSpawn");
     }
 }
