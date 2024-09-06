@@ -16,6 +16,12 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
 
     public event Action Disconnected;
 
+    public event Action<HeartBeat> HeartBeatEvent;
+    public event Action<PlayerSpawn> PlayerSpawnEvent;
+    public event Action<EntityMovements> EntityMovementsEvent; 
+    public event Action<EntitySpawns> EntitySpawnsEvent; 
+    public event Action<EntityDespawn> EntityDespawnEvent;
+
     ~Connection()
     {
         Disconnect();
@@ -130,23 +136,23 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
         switch (packetBase.PacketBaseType)
         {
             case PacketType.EntityMovements:
-                HandleEntityMovements(packetBase.PacketBase_AsEntityMovements());
+                EntityMovementsEvent.Invoke(packetBase.PacketBase_AsEntityMovements());
                 break;
 
             case PacketType.EntitySpawns:
-                HandleEntitySpawns(packetBase.PacketBase_AsEntitySpawns());
+                EntitySpawnsEvent.Invoke(packetBase.PacketBase_AsEntitySpawns());
                 break;
 
             case PacketType.EntityDespawn:
-                HandleEntityDespawn(packetBase.PacketBase_AsEntityDespawn());
+                EntityDespawnEvent.Invoke(packetBase.PacketBase_AsEntityDespawn());
                 break;
 
             case PacketType.PlayerSpawn:
-                HandlePlayerSpawn(packetBase.PacketBase_AsPlayerSpawn());
+                PlayerSpawnEvent.Invoke(packetBase.PacketBase_AsPlayerSpawn());
                 break;
 
             case PacketType.HeartBeat:
-                HandleHeartBeat();
+                HeartBeatEvent.Invoke(packetBase.PacketBase_AsHeartBeat());
                 break;
         }
     }

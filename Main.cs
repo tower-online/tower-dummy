@@ -6,6 +6,7 @@ using Tower.System;
 var loggerFactory = LoggerFactory.Create(builder =>
 {
     builder.AddConsole();
+    builder.SetMinimumLevel(LogLevel.Debug);
 });
 
 List<Client> clients = [];

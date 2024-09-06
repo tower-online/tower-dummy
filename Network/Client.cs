@@ -23,7 +23,9 @@ public class Client
         _connection = new Connection(_logger, _cancellationTokenSource.Token);
 
         _connection.Disconnected += OnDisconnected;
-        _connection.PlayerSpawnEventHandler += OnPlayerSpawn;
+        
+        _connection.HeartBeatEvent += OnHeartBeat;
+        _connection.PlayerSpawnEvent += OnPlayerSpawn;
     }
 
     public async Task Run()
@@ -74,7 +76,19 @@ public class Client
         Stop();
     }
 
-    private void OnPlayerSpawn(object? _, PlayerSpawnEventArgs args)
+    private void OnHeartBeat(HeartBeat heartBeat)
+    {
+        _logger.LogDebug("beating");
+        
+        var builder = new FlatBufferBuilder(64);
+        HeartBeat.StartHeartBeat(builder);
+        var beat = HeartBeat.EndHeartBeat(builder);
+        var packetBase = PacketBase.CreatePacketBase(builder, PacketType.HeartBeat, beat.Value);
+        builder.FinishSizePrefixed(packetBase.Value);
+        _connection.SendPacket(builder.DataBuffer);
+    }
+
+    private void OnPlayerSpawn(PlayerSpawn spawn)
     {
         _logger.LogInformation("OnPlayerSpawn");
     }
