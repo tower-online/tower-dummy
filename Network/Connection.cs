@@ -8,17 +8,19 @@ namespace Tower.Network;
 
 public partial class Connection(ILogger logger, CancellationToken cancellationToken)
 {
-    private readonly TcpClient _client = new();
+    private readonly TcpClient _socket = new();
     private NetworkStream? _stream;
     private readonly BufferBlock<ByteBuffer> _sendBufferBlock = new();
     private readonly CancellationToken _cancellationToken = cancellationToken;
     private readonly ILogger _logger = logger;
 
+    public event Action Disconnected;
+
     ~Connection()
     {
         Disconnect();
         _stream?.Dispose();
-        _client.Dispose();
+        _socket.Dispose();
     }
 
     public async Task Run()
@@ -26,9 +28,11 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
         // Receiving loop
         var receiveTask = Task.Run(async () =>
         {
-            while (_client.Connected)
+            while (_socket.Connected)
             {
                 var buffer = await ReceivePacketAsync();
+                if (buffer is null) continue;
+                
                 HandlePacket(buffer);
             }
         }, _cancellationToken);
@@ -36,11 +40,11 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
         // Sending loop
         var sendTask = Task.Run(async () =>
         {
-            while (_client.Connected)
+            while (_socket.Connected)
             {
-                var buffer = await _sendBufferBlock.ReceiveAsync(_cancellationToken);
                 try
                 {
+                    var buffer = await _sendBufferBlock.ReceiveAsync(_cancellationToken);
                     if (_stream is null) break;
                     await _stream.WriteAsync(buffer.ToSizedArray(), _cancellationToken);
                 }
@@ -59,15 +63,16 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
         _logger.LogInformation("Connecting to {}:{}...", host, port);
         try
         {
-            await _client.ConnectAsync(host, port, _cancellationToken);
-            _stream = _client.GetStream();
-            _client.NoDelay = true;
+            await _socket.ConnectAsync(host, port, _cancellationToken);
+            _stream = _socket.GetStream();
+            _socket.NoDelay = true;
 
             return true;
         }
         catch (Exception ex)
         {
             _logger.LogError("Error connecting: {}", ex);
+            Disconnect();
         }
 
         return false;
@@ -75,16 +80,18 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
 
     public void Disconnect()
     {
-        if (!_client.Connected) return;
+        if (!_socket.Connected) return;
 
         _logger.LogInformation("Disconnecting...");
         _stream?.Close();
-        _client.Close();
+        _socket.Close();
+        
+        Disconnected.Invoke();
     }
 
-    private async Task<ByteBuffer> ReceivePacketAsync()
+    private async Task<ByteBuffer?> ReceivePacketAsync()
     {
-        if (!_client.Connected || _stream is null) return new ByteBuffer(0);
+        if (!_socket.Connected || _stream is null) return null;
 
         try
         {
@@ -99,14 +106,13 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
         catch (Exception)
         {
             Disconnect();
+            return null;
         }
-
-        return new ByteBuffer(0);
     }
 
     public void SendPacket(ByteBuffer buffer)
     {
-        if (!_client.Connected) return;
+        if (!_socket.Connected) return;
 
         _sendBufferBlock.Post(buffer);
     }
@@ -137,10 +143,6 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
 
             case PacketType.PlayerSpawn:
                 HandlePlayerSpawn(packetBase.PacketBase_AsPlayerSpawn());
-                break;
-
-            case PacketType.ClientJoinResponse:
-                HandleClientJoinResponse(packetBase.PacketBase_AsClientJoinResponse());
                 break;
 
             case PacketType.HeartBeat:

@@ -22,6 +22,7 @@ public class Client
         _logger = loggerFactory.CreateLogger(_username);
         _connection = new Connection(_logger, _cancellationTokenSource.Token);
 
+        _connection.Disconnected += OnDisconnected;
         _connection.PlayerSpawnEventHandler += OnPlayerSpawn;
     }
 
@@ -40,7 +41,8 @@ public class Client
 
         _logger.LogInformation("Character: {}", characters[0]);
 
-        if (!await _connection.ConnectAsync(Settings.RemoteHost, Settings.RemotePort))
+        var connected = await _connection.ConnectAsync(Settings.RemoteHost, Settings.RemotePort);
+        if (!connected)
         {
             Stop();
             return;
@@ -65,6 +67,11 @@ public class Client
     {
         _cancellationTokenSource.Cancel();
         _connection.Disconnect();
+    }
+
+    private void OnDisconnected()
+    {
+        Stop();
     }
 
     private void OnPlayerSpawn(object? _, PlayerSpawnEventArgs args)
