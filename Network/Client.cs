@@ -1,8 +1,10 @@
+using System.Timers;
 using Google.FlatBuffers;
 using Microsoft.Extensions.Logging;
 using Tower.Game;
 using Tower.System;
 using Tower.Network.Packet;
+using Timer = System.Timers.Timer;
 
 namespace Tower.Network;
 
@@ -16,6 +18,9 @@ public class Client
     private string? _authToken;
     private Player? _player;
 
+    private static readonly TimeSpan UpdateInterval = TimeSpan.FromMilliseconds(100);
+    private readonly Timer _updateTimer = new(UpdateInterval);
+
     public Client(string username, ILoggerFactory loggerFactory)
     {
         _username = username;
@@ -25,7 +30,15 @@ public class Client
         _connection.Disconnected += OnDisconnected;
         
         _connection.HeartBeatEvent += OnHeartBeat;
-        _connection.PlayerSpawnEvent += OnPlayerSpawn;
+        _connection.ClientJoinResponseEvent += OnClientJoinResponse;
+        _connection.PlayerEnterZoneResponseEvent += response =>
+        {
+            if (response.Result) return;
+            _logger.LogWarning("PlayerEnterZone failed");
+        };
+
+        _updateTimer.Elapsed += OnUpdate;
+        _updateTimer.AutoReset = true;
     }
 
     public async Task Run()
@@ -61,14 +74,31 @@ public class Client
         var packetBase = PacketBase.CreatePacketBase(builder, PacketType.ClientJoinRequest, request.Value);
         builder.FinishSizePrefixed(packetBase.Value);
         _connection.SendPacket(builder.DataBuffer);
-
+        
+        _updateTimer.Enabled = true;
         await _connection.Run();
     }
 
     public void Stop()
     {
+        _updateTimer.Enabled = false;
         _cancellationTokenSource.Cancel();
         _connection.Disconnect();
+    }
+
+    private void OnUpdate(object? sender, ElapsedEventArgs e)
+    {
+        _player?.Update();
+
+        FlatBufferBuilder builder = new(128);
+        PlayerMovement.StartPlayerMovement(builder);
+        var targetDirectionOffset = Vector2.CreateVector2(builder, _player.TargetDirection.X, _player.TargetDirection.Y);
+        PlayerMovement.AddTargetDirection(builder, targetDirectionOffset);
+        var movementOffset = PlayerMovement.EndPlayerMovement(builder);
+        var packetBaseOffset = PacketBase.CreatePacketBase(builder, PacketType.PlayerMovement, movementOffset.Value);
+        PacketBase.FinishSizePrefixedPacketBaseBuffer(builder, packetBaseOffset);
+        
+        _connection.SendPacket(builder.DataBuffer);
     }
 
     private void OnDisconnected()
@@ -88,8 +118,24 @@ public class Client
         _connection.SendPacket(builder.DataBuffer);
     }
 
-    private void OnPlayerSpawn(PlayerSpawn spawn)
+    private void OnClientJoinResponse(ClientJoinResponse response)
     {
-        _logger.LogInformation("OnPlayerSpawn");
+        _logger.LogDebug("client join response");
+        var spawn = response.Spawn.Value;
+        var playerData = spawn.Data.Value;
+        var location = response.CurrentLocation.Value;
+        
+        _player = new Player(spawn.EntityId)
+        {
+            CharacterName = playerData.Name
+        };
+        
+        var builder = new FlatBufferBuilder(128);
+        PlayerEnterZoneRequest.StartPlayerEnterZoneRequest(builder);
+        PlayerEnterZoneRequest.AddLocation(builder, WorldLocation.CreateWorldLocation(builder, location.Floor, location.ZoneId));
+        var request = PlayerEnterZoneRequest.EndPlayerEnterZoneRequest(builder);
+        var packetBase = PacketBase.CreatePacketBase(builder, PacketType.PlayerEnterZoneRequest, request.Value);
+        builder.FinishSizePrefixed(packetBase.Value);
+        _connection.SendPacket(builder.DataBuffer);
     }
 }

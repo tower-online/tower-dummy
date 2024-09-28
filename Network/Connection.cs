@@ -17,7 +17,8 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
     public event Action Disconnected;
 
     public event Action<HeartBeat> HeartBeatEvent;
-    public event Action<PlayerSpawn> PlayerSpawnEvent;
+    public event Action<ClientJoinResponse> ClientJoinResponseEvent;
+    public event Action<PlayerEnterZoneResponse> PlayerEnterZoneResponseEvent; 
     public event Action<EntityMovements> EntityMovementsEvent; 
     public event Action<EntitySpawns> EntitySpawnsEvent; 
     public event Action<EntityDespawn> EntityDespawnEvent;
@@ -131,6 +132,7 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
         //     Disconnect();
         //     return;
         // }
+        
 
         var packetBase = PacketBase.GetRootAsPacketBase(buffer);
         switch (packetBase.PacketBaseType)
@@ -147,8 +149,12 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
                 EntityDespawnEvent.Invoke(packetBase.PacketBase_AsEntityDespawn());
                 break;
 
-            case PacketType.PlayerSpawn:
-                PlayerSpawnEvent.Invoke(packetBase.PacketBase_AsPlayerSpawn());
+            case PacketType.ClientJoinResponse:
+                ClientJoinResponseEvent.Invoke(packetBase.PacketBase_AsClientJoinResponse());
+                break;
+            
+            case PacketType.PlayerEnterZoneResponse:
+                PlayerEnterZoneResponseEvent.Invoke(packetBase.PacketBase_AsPlayerEnterZoneResponse());
                 break;
 
             case PacketType.HeartBeat:
