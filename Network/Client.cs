@@ -21,6 +21,9 @@ public class Client
     private static readonly TimeSpan UpdateInterval = TimeSpan.FromMilliseconds(100);
     private readonly Timer _updateTimer = new(UpdateInterval);
 
+    private static readonly Random Rand = new();
+    private DateTime _stayZoneUntill;
+
     public Client(string username, ILoggerFactory loggerFactory)
     {
         _username = username;
@@ -28,7 +31,7 @@ public class Client
         _connection = new Connection(_logger, _cancellationTokenSource.Token);
 
         _connection.Disconnected += OnDisconnected;
-        
+
         _connection.HeartBeatEvent += OnHeartBeat;
         _connection.ClientJoinResponseEvent += OnClientJoinResponse;
         _connection.PlayerEnterZoneResponseEvent += response =>
@@ -39,6 +42,8 @@ public class Client
 
         _updateTimer.Elapsed += OnUpdate;
         _updateTimer.AutoReset = true;
+
+        _stayZoneUntill = DateTime.Now + TimeSpan.FromSeconds(Rand.Next(5, 15));
     }
 
     public async Task Run()
@@ -74,7 +79,7 @@ public class Client
         var packetBase = PacketBase.CreatePacketBase(builder, PacketType.ClientJoinRequest, request.Value);
         builder.FinishSizePrefixed(packetBase.Value);
         _connection.SendPacket(builder.DataBuffer);
-        
+
         _updateTimer.Enabled = true;
         await _connection.Run();
     }
@@ -88,15 +93,34 @@ public class Client
 
     private void OnUpdate(object? sender, ElapsedEventArgs e)
     {
+        Update();
         _player?.Update();
 
         FlatBufferBuilder builder = new(128);
         PlayerMovement.StartPlayerMovement(builder);
-        var targetDirectionOffset = Vector2.CreateVector2(builder, _player.TargetDirection.X, _player.TargetDirection.Y);
+        var targetDirectionOffset =
+            Vector2.CreateVector2(builder, _player.TargetDirection.X, _player.TargetDirection.Y);
         PlayerMovement.AddTargetDirection(builder, targetDirectionOffset);
         var movementOffset = PlayerMovement.EndPlayerMovement(builder);
         var packetBaseOffset = PacketBase.CreatePacketBase(builder, PacketType.PlayerMovement, movementOffset.Value);
         PacketBase.FinishSizePrefixedPacketBaseBuffer(builder, packetBaseOffset);
+
+        _connection.SendPacket(builder.DataBuffer);
+    }
+
+    private void Update()
+    {
+        if (DateTime.Now < _stayZoneUntill) return;
+
+        _stayZoneUntill = DateTime.Now + TimeSpan.FromSeconds(Rand.Next(5, 15));
+
+        FlatBufferBuilder builder = new(128);
+        PlayerEnterZoneRequest.StartPlayerEnterZoneRequest(builder);
+        PlayerEnterZoneRequest.AddLocation(builder,
+            WorldLocation.CreateWorldLocation(builder, 0, (uint)Rand.Next(1, 10)));
+        var request = PlayerEnterZoneRequest.EndPlayerEnterZoneRequest(builder);
+        var packetBase = PacketBase.CreatePacketBase(builder, PacketType.PlayerEnterZoneRequest, request.Value);
+        PacketBase.FinishSizePrefixedPacketBaseBuffer(builder, packetBase);
         
         _connection.SendPacket(builder.DataBuffer);
     }
@@ -109,7 +133,7 @@ public class Client
     private void OnHeartBeat(HeartBeat heartBeat)
     {
         _logger.LogDebug("beating");
-        
+
         var builder = new FlatBufferBuilder(64);
         HeartBeat.StartHeartBeat(builder);
         var beat = HeartBeat.EndHeartBeat(builder);
@@ -120,19 +144,19 @@ public class Client
 
     private void OnClientJoinResponse(ClientJoinResponse response)
     {
-        _logger.LogDebug("client join response");
         var spawn = response.Spawn.Value;
         var playerData = spawn.Data.Value;
         var location = response.CurrentLocation.Value;
-        
+
         _player = new Player(spawn.EntityId)
         {
             CharacterName = playerData.Name
         };
-        
+
         var builder = new FlatBufferBuilder(128);
         PlayerEnterZoneRequest.StartPlayerEnterZoneRequest(builder);
-        PlayerEnterZoneRequest.AddLocation(builder, WorldLocation.CreateWorldLocation(builder, location.Floor, location.ZoneId));
+        PlayerEnterZoneRequest.AddLocation(builder,
+            WorldLocation.CreateWorldLocation(builder, location.Floor, location.ZoneId));
         var request = PlayerEnterZoneRequest.EndPlayerEnterZoneRequest(builder);
         var packetBase = PacketBase.CreatePacketBase(builder, PacketType.PlayerEnterZoneRequest, request.Value);
         builder.FinishSizePrefixed(packetBase.Value);

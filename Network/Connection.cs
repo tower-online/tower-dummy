@@ -61,8 +61,32 @@ public partial class Connection(ILogger logger, CancellationToken cancellationTo
                 }
             }
         }, _cancellationToken);
+        
+        
+        // Ping loop
+        var pingTask = Task.Run(async () =>
+        {
+            PeriodicTimer timer = new(TimeSpan.FromSeconds(1));
 
-        await Task.WhenAll(receiveTask, sendTask);
+            while (await timer.WaitForNextTickAsync(_cancellationToken))
+            {
+                var builder = new FlatBufferBuilder(128);
+                var ping = Ping.CreatePing(builder, 66);
+                var packetBase = PacketBase.CreatePacketBase(builder, PacketType.Ping, ping.Value);
+                builder.Finish(packetBase.Value);
+
+                var buffer = builder.DataBuffer;
+                var buffer2 = new ByteBuffer(buffer.ToSizedArray());
+                // var verifier = new Verifier(buffer);
+                _logger.LogInformation("verifying... {}", Ping.VerifyPing(buffer2));
+                // _logger.LogInformation("ping: {}", Ping.VerifyPing(buffer));
+                //
+                // SendPacket(buffer);
+            }
+            
+        }, _cancellationToken);
+
+        await Task.WhenAll(receiveTask, sendTask, pingTask);
     }
 
     public async Task<bool> ConnectAsync(string host, int port)
