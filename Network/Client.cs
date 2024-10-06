@@ -98,9 +98,8 @@ public class Client
 
         FlatBufferBuilder builder = new(128);
         PlayerMovement.StartPlayerMovement(builder);
-        var targetDirectionOffset =
-            Vector2.CreateVector2(builder, _player.TargetDirection.X, _player.TargetDirection.Y);
-        PlayerMovement.AddTargetDirection(builder, targetDirectionOffset);
+        PlayerMovement.AddX(builder, _player.TargetDirection.X);
+        PlayerMovement.AddZ(builder, _player.TargetDirection.Z);
         var movementOffset = PlayerMovement.EndPlayerMovement(builder);
         var packetBaseOffset = PacketBase.CreatePacketBase(builder, PacketType.PlayerMovement, movementOffset.Value);
         PacketBase.FinishSizePrefixedPacketBaseBuffer(builder, packetBaseOffset);
@@ -110,6 +109,7 @@ public class Client
 
     private void Update()
     {
+        if (!Settings.ZoneMovementEnabled) return;
         if (DateTime.Now < _stayZoneUntill) return;
 
         _stayZoneUntill = DateTime.Now + TimeSpan.FromSeconds(Rand.Next(5, 15));

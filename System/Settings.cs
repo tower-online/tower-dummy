@@ -9,6 +9,8 @@ public static class Settings
     public static string RemoteHost { get; }
     public static ushort RemotePort { get; }
     public static uint NumClients { get; }
+    public static bool MovementEnabled { get; }
+    public static bool ZoneMovementEnabled { get; }
     
     static Settings()
     {
@@ -19,5 +21,7 @@ public static class Settings
         RemoteHost = Convert.ToString(settings["remote_host"])!;
         RemotePort = Convert.ToUInt16(settings["remote_port"]);
         NumClients = Convert.ToUInt32(settings["num_clients"]);
+        MovementEnabled = Convert.ToBoolean(settings["enable_movement"]);
+        ZoneMovementEnabled = Convert.ToBoolean(settings["enable_zone_movement"]);
     }
 }

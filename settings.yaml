@@ -2,3 +2,6 @@
 remote_host: localhost
 remote_port: 30000
 num_clients: 10
+
+enable_movement: true
+enable_zone_movement: false

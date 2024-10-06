@@ -1,4 +1,5 @@
 using System.Numerics;
+using Tower.System;
 
 namespace Tower.Game;
 
@@ -17,7 +18,7 @@ public class Player
 
     public uint EntityId { get; init; }
     public string CharacterName { get; set; }
-    public Vector2 TargetDirection { get; private set; }
+    public Vector3 TargetDirection { get; private set; }
 
     public Player(uint entityId)
     {
@@ -31,8 +32,10 @@ public class Player
             _lastTransition = DateTime.Now;
             _transitionDelay = TimeSpan.FromSeconds(Rand.Next(3, 10));
 
-            var states = Enum.GetValues<State>();
-            State newState = (State)states.GetValue(Rand.Next(states.Length));
+            List<State> states = [State.Idle];
+            if (Settings.MovementEnabled) states.Add(State.Moving);
+
+            var newState = states[Rand.Next(states.Count)];
             Transitioned(newState);
         }
     }
@@ -44,10 +47,10 @@ public class Player
 
         TargetDirection = _state switch
         {
-            State.Idle => Vector2.Zero,
-            State.Moving => new Vector2((float)Rand.NextDouble() * 2.0f - 1.0f, (float)Rand.NextDouble() * 2.0f - 1.0f),
+            State.Idle => Vector3.Zero,
+            State.Moving => new Vector3((float)Rand.NextDouble() * 2.0f - 1.0f, 0, (float)Rand.NextDouble() * 2.0f - 1.0f),
             _ => TargetDirection
         };
-        if (TargetDirection != Vector2.Zero) TargetDirection = Vector2.Normalize(TargetDirection);
+        if (TargetDirection != Vector3.Zero) TargetDirection = Vector3.Normalize(TargetDirection);
     }
 }
